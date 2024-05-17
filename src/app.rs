@@ -238,7 +238,7 @@ impl App {
     }
 
     fn death_check(&mut self) -> Result<()> {
-        if self.head[0] > 45.0 || self.head[0] < -45.0 || self.head[1] > 45.0 || self.head[1] < -45.0 {
+        if self.head[0] > 90.0 || self.head[0] < -90.0 || self.head[1] > 45.0 || self.head[1] < -45.0 {
             self.dead = true;
             return Ok(());
         }
@@ -308,7 +308,7 @@ impl App {
         //TODO: implement
         let mut rng = thread_rng();
 
-        self.fruits[0] = rng.gen_range(-45.0..45.0);
+        self.fruits[0] = rng.gen_range(-90.0..90.0);
         self.fruits[1] = rng.gen_range(-45.0..45.0);
 
         Ok(())
