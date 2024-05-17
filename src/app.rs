@@ -49,7 +49,7 @@ impl Widget for &App {
             Self: Sized {
 
         if self.dead {
-            let title = Title::from(" Dinosaur Game ".bold());
+            let title = Title::from(" Snake ".bold());
             let instructions = Title::from(Line::from(vec![
                 " Restart ".into(),
                 "<Enter> ".bold(),
@@ -89,7 +89,7 @@ impl Widget for &App {
             .render(area, buf);
         }        
         else {
-            let title = Title::from(" Dinosaur Game ".bold());
+            let title = Title::from(" Snake ".bold());
             let instructions = Title::from(Line::from(vec![
                 " Up ".into(),
                 "<Up> ".bold(),
@@ -169,8 +169,8 @@ impl Widget for &App {
                         ctx.draw(&canvas::Rectangle {
                             x: self.x[i],
                             y: self.y[i],
-                            width: 1.0,
-                            height: 1.0,
+                            width: 2.0,
+                            height: 2.0,
                             color: player_color,
                         });
                     }
@@ -179,8 +179,8 @@ impl Widget for &App {
                         ctx.draw(&canvas::Rectangle {
                             x: self.fruits[0],
                             y: self.fruits[1],
-                            width: 1.0,
-                            height: 1.0,
+                            width: 2.0,
+                            height: 2.0,
                             color: Color::Red,
                         })
                     }
@@ -260,11 +260,10 @@ impl App {
 
     fn collision_check(&mut self) -> Result<()> {
         //TODO: implement
-        if (self.head[0] > self.fruits[0] - 1.0 && self.head[0] < self.fruits[0] + 1.0) && (self.head[1] > self.fruits[1] - 1.0 && self.head[1] < self.fruits[1] + 1.0) {
+        if (self.head[0] > self.fruits[0] - 2.0 && self.head[0] < self.fruits[0] + 2.0) && (self.head[1] > self.fruits[1] - 2.0 && self.head[1] < self.fruits[1] + 2.0) {
             self.score += 100;
             self.update_enemies()?;
             self.append_segment()?;
-            self.length += 1;
         }
         Ok(())
     }
@@ -280,6 +279,7 @@ impl App {
             self.y.push(self.y[self.length - 1] - self.direction[self.length][1]);
             self.direction.push(self.direction[self.length].clone());
         }
+        self.length += 1;
         Ok(())
     }
 
@@ -341,6 +341,7 @@ impl App {
             KeyCode::Esc => self.pause()?,
             KeyCode::Enter => self.restart()?,
             KeyCode::Tab => self.auto()?,
+            KeyCode::Char('a') => self.append_segment()?,
             _ => {}
         }
         Ok(())
