@@ -34,11 +34,13 @@ pub struct App {
     exit: bool,
     y: Vec<f64>,
     x: Vec<f64>,
-    length: i64,
-    enemies: Vec<Vec<f64>>,
+    head: Vec<f64>,
+    length: usize,
+    fruits: Vec<f64>,
     on_puase: bool,
     dead: bool,
     auto: bool,
+    direction: Vec<Vec<f64>>,
 }
 
 impl Widget for &App {
@@ -146,7 +148,6 @@ impl Widget for &App {
                 Paragraph::new(pause_text)
                 .centered()
                 .block(block.clone())
-                .style(Style::default().bg(player_color))
                 .render(area, buf);
             }
 
@@ -158,31 +159,30 @@ impl Widget for &App {
                 .background_color(color)
                 .paint(|ctx|{
                     ctx.draw(&canvas::Rectangle {
-                        x: self.x[0],
-                        y: self.y[0],
-                        width: 10.0,
-                        height: 1.0,
+                        x: self.head[0],
+                        y: self.head[1],
+                        width: 2.0,
+                        height: 2.0,
                         color: player_color,
                     });
+                    for i in 0..self.length {
+                        ctx.draw(&canvas::Rectangle {
+                            x: self.x[i],
+                            y: self.y[i],
+                            width: 1.0,
+                            height: 1.0,
+                            color: player_color,
+                        });
+                    }
                     ctx.layer();
-                    ctx.draw(&canvas::Line {
-                        x1: -90.0,
-                        y1: -20.0,
-                        x2: 90.0,
-                        y2: -20.0,
-                        color: Color::Green,
-                    });
-                    ctx.layer();
-                    if self.enemies.len() > 0 {
-                        for enemy in self.enemies.iter(){
-                            ctx.draw(&canvas::Rectangle {
-                                x: enemy[0],
-                                y: enemy[2],
-                                width: 2.0,
-                                height: enemy[1],
-                                color: Color::Red,
-                            })
-                        }
+                    if self.fruits.len() > 0 {
+                        ctx.draw(&canvas::Rectangle {
+                            x: self.fruits[0],
+                            y: self.fruits[1],
+                            width: 1.0,
+                            height: 1.0,
+                            color: Color::Red,
+                        })
                     }
                 });
             player.render(area, buf);  
@@ -195,7 +195,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {
         loop {
             terminal.draw(|frame| self.render_frame(frame))?;
-            let time = 5000;
+            let time = 100000;
             if event::poll(Duration::from_micros(time))? {
                 self.handle_events().wrap_err("handle events failed")?;
             }
@@ -208,13 +208,10 @@ impl App {
             if self.auto {
                 autorun(self)?;
             }
-            self.update_position()?;
-            self.update_enemies()?;
-            if self.collision_check() {
-                self.dead = true;
-            }
-            self.score += 1;
+            self.collision_check()?;
+            self.death_check()?;
             self.highscore();
+            self.update_position()?;
         }
         Ok(())
     }
@@ -229,7 +226,6 @@ impl App {
         }
     }
 
-
     fn handle_events(&mut self) -> Result<()> {
         match event::read()? {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
@@ -241,66 +237,79 @@ impl App {
         }
     }
 
-    fn collision_check(&mut self) -> bool {
-        //TODO: implement
-        for enemy in self.enemies.iter() {
-            if enemy[0] < 5.0 && enemy[0] > -5.0 {
-                return true;
-                }
+    fn death_check(&mut self) -> Result<()> {
+        if self.head[0] > 45.0 || self.head[0] < -45.0 || self.head[1] > 45.0 || self.head[1] < -45.0 {
+            self.dead = true;
+            return Ok(());
+        }
+        let x_check: Vec<bool> = self.x.clone().into_iter().map(|x| {
+            x > self.head[0] - 1.0 && x < self.head[0] + 1.0
+        }).collect();
+
+        let y_check: Vec<bool> = self.y.clone().into_iter().map(|x| {
+            x > self.head[1] - 1.0 && x < self.head[1] + 1.0
+        }).collect();
+        for i in 0..self.x.len() {
+            if y_check[i] && x_check[i] {
+                self.dead = true;
+                return Ok(());
             }
-        false
+        }
+        Ok(())
+    }
+
+    fn collision_check(&mut self) -> Result<()> {
+        //TODO: implement
+        if (self.head[0] > self.fruits[0] - 1.0 && self.head[0] < self.fruits[0] + 1.0) && (self.head[1] > self.fruits[1] - 1.0 && self.head[1] < self.fruits[1] + 1.0) {
+            self.score += 100;
+            self.update_enemies()?;
+            self.append_segment()?;
+            self.length += 1;
+        }
+        Ok(())
+    }
+
+    fn append_segment(&mut self) -> Result<()> {
+        if self.length == 0 {
+            self.x.push(self.head[0] - self.direction[0][0]);
+            self.y.push(self.head[1] - self.direction[0][1]);
+            self.direction.push(self.direction[self.length].clone());
+        }
+        else {
+            self.x.push(self.x[self.length - 1] - self.direction[self.length][0]);
+            self.y.push(self.y[self.length - 1] - self.direction[self.length][1]);
+            self.direction.push(self.direction[self.length].clone());
+        }
+        Ok(())
     }
 
     fn update_position(&mut self) -> Result<()> {
         //TODO: implement
+        self.head[0] += self.direction[0][0];
+        self.head[1] += self.direction[0][1];
+        self.update_segments()?;
+        Ok(())
+    }
+
+    fn update_segments(&mut self) -> Result<()> {
+        if self.length == 0 {
+            return Ok(());
+        }
+        let last_dir = self.direction.clone();
+        for i in 0..self.length{
+            self.x[i] += self.direction[i + 1][0];
+            self.y[i] += self.direction[i + 1][1];
+            self.direction[i + 1] = last_dir[i].clone();
+        }
         Ok(())
     }
 
     fn update_enemies(&mut self) -> Result<()> {
         //TODO: implement
         let mut rng = thread_rng();
-        let mut last_in_range: bool = false;
-        let mut last_is_flying: bool = false;
-        let mut last_one = 0.0;
-        if self.enemies.len() > 0 {
-            last_one = self.enemies[self.enemies.len() - 1][0];
-            if last_one < 50.0 || last_one > 84.0 {
-                last_in_range = true;
-                if self.enemies[self.enemies.len() - 1][2] > -20.0 {
-                    last_is_flying = true;
-                }
-            }
-        }
-        else {
-            last_in_range = true;
-        }
-        
-        if rng.gen_range(0.0..1.0) < 0.008 && last_in_range {
-            let mut height = rng.gen_range(5.0..8.0);
-            let flying = rng.gen_range(0.0..1.0);
-            let mut y = -20.0;
-            if (flying > 0.75 && flying < 0.82) && !(last_one > 84.0 && !last_is_flying){
-                y = rng.gen_range(-12.0..-8.0);
-                height = 1.0;
-            }
-            else if flying > 0.82 && !(last_one > 84.0 && !last_is_flying){
-                y = rng.gen_range(0.0..5.0);
-                height = 1.0;
-            }
-            self.enemies.push(vec![88.0, height, y]);
-        }
-        let mut count = 0;
-        for  enemy in self.enemies.iter_mut() {
-            if enemy[0] > - 90.0 {
-                enemy[0] -= 1.0;
-            }
-            else {
-                count += 1;
-            }
-        }
-        for _ in 0..count {
-            self.enemies.remove(0);
-        }
+
+        self.fruits[0] = rng.gen_range(-45.0..45.0);
+        self.fruits[1] = rng.gen_range(-45.0..45.0);
 
         Ok(())
     }
@@ -310,14 +319,15 @@ impl App {
             score: 0,
             highscore: 0,
             exit: false, 
-            y: vec![-20.0],
-            x: vec![2.0],
+            y: vec![],
+            x: vec![],
             length: 0,
             on_puase: false,
             dead: false,
             auto: false,
-            enemies: vec![vec![9.0]]
-
+            fruits: vec![0.0, 0.0],
+            head: vec![1.0, 0.0],
+            direction: vec![vec![1.0, 0.0]],
         }
     }
 
@@ -337,18 +347,38 @@ impl App {
     }
 
     fn right(&mut self) -> Result<()> {
+        if self.direction[0][0] == -1.0 {
+            return Ok(());
+        }
+        self.direction[0][0] = 1.0;
+        self.direction[0][1] = 0.0;
         Ok(())
     }
 
     fn up(&mut self) -> Result<()> {
+        if self.direction[0][1] == -1.0 {
+            return Ok(());
+        }
+        self.direction[0][0] = 0.0;
+        self.direction[0][1] = 1.0;
         Ok(())
     }
 
     fn down(&mut self) -> Result<()> {
+        if self.direction[0][1] == 1.0 {
+            return Ok(());
+        }
+        self.direction[0][0] = 0.0;
+        self.direction[0][1] = -1.0;
         Ok(())
     }
 
     fn left(&mut self) -> Result<()> {
+        if self.direction[0][0] == 1.0 {
+            return Ok(());
+        }
+        self.direction[0][0] = -1.0;
+        self.direction[0][1] = 0.0;
         Ok(())
     }
 
@@ -372,12 +402,15 @@ impl App {
 
             self.dead = false;
             self.on_puase = false;
-            self.y = vec![-20.0];
-            self.x = vec![0.0];
-            self.enemies = vec![];
+            self.y = vec![];
+            self.x = vec![];
+            self.fruits = vec![0.0, 0.0];
             self.score = 0;
             self.highscore = num;
             self.auto = false;
+            self.length = 0;
+            self.head = vec![0.0, 0.0];
+            self.direction = vec![vec![1.0, 0.0]];
         }
 
         Ok(())
@@ -400,21 +433,7 @@ impl App {
 }
 
 fn autorun(app: &mut App) -> Result<()> {
-    //TODO: implemment
-    let mut enemies_in_front = vec![];
-
-    if app.enemies.len() > 0 {
-        for enemy in app.enemies.iter() {
-            if enemy[0] > 5.0 {
-                enemies_in_front.push(enemy);
-            }
-        }
-        
-        if enemies_in_front.len() > 0 {
-            let closest_enemy: &Vec<f64> = enemies_in_front[0];
-        }
-    }
-
+    //TODO: implemmet
     Ok(())
 }
 
