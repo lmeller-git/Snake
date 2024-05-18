@@ -15,7 +15,6 @@ use ratatui::{
     style::Color,
 };
 
-use std::collections::VecDeque;
 use std::path::Path;
 
 use std::time::Duration;
@@ -30,8 +29,7 @@ pub struct App {
     pub score: u64,
     pub highscore: u64,
     exit: bool,
-    y: Vec<f64>,
-    x: Vec<f64>,
+    segments: Vec<Vec<f64>>,
     head: Vec<f64>,
     length: usize,
     fruits: Vec<f64>,
@@ -120,6 +118,43 @@ impl Widget for &App {
                             .position(Position::Bottom))
                         .borders(Borders::ALL);
 
+
+            //TODO render snake and food
+            let player = Canvas::default()
+                .block(block.clone())
+                .x_bounds([-90.0, 90.0])
+                .y_bounds([-45.0, 45.0])
+                .background_color(color)
+                .paint(|ctx|{
+                    ctx.draw(&canvas::Rectangle {
+                        x: self.head[0],
+                        y: self.head[1],
+                        width: 2.0,
+                        height: 2.0,
+                        color: player_color,
+                    });
+                    for i in 0..self.length {
+                        ctx.draw(&canvas::Rectangle {
+                            x: self.segments[i][0],
+                            y: self.segments[i][1],
+                            width: 2.0,
+                            height: 2.0,
+                            color: player_color,
+                        });
+                    }
+                    ctx.layer();
+                    if self.fruits.len() > 0 {
+                        ctx.draw(&canvas::Rectangle {
+                            x: self.fruits[0],
+                            y: self.fruits[1],
+                            width: 2.0,
+                            height: 2.0,
+                            color: Color::Red,
+                        })
+                    }
+                });
+            player.render(area, buf);
+
             let counter_text = Text::from(vec![Line::from(vec![
                 "Score ".into(),
                 self.score.to_string().into(),
@@ -156,44 +191,7 @@ impl Widget for &App {
                 .centered()
                 .block(block.clone())
                 .render(area, buf);
-            }
-
-
-            //TODO render snake and food
-            let player = Canvas::default()
-                .block(block)
-                .x_bounds([-90.0, 90.0])
-                .y_bounds([-45.0, 45.0])
-                .background_color(color)
-                .paint(|ctx|{
-                    ctx.draw(&canvas::Rectangle {
-                        x: self.head[0],
-                        y: self.head[1],
-                        width: 2.0,
-                        height: 2.0,
-                        color: player_color,
-                    });
-                    for i in 0..self.length {
-                        ctx.draw(&canvas::Rectangle {
-                            x: self.x[i],
-                            y: self.y[i],
-                            width: 2.0,
-                            height: 2.0,
-                            color: player_color,
-                        });
-                    }
-                    ctx.layer();
-                    if self.fruits.len() > 0 {
-                        ctx.draw(&canvas::Rectangle {
-                            x: self.fruits[0],
-                            y: self.fruits[1],
-                            width: 2.0,
-                            height: 2.0,
-                            color: Color::Red,
-                        })
-                    }
-                });
-            player.render(area, buf);  
+            }  
         }   
     }   
 }
@@ -203,7 +201,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {
         loop {
             terminal.draw(|frame| self.render_frame(frame))?;
-            let time = 1000;
+            let time = 100000;
             if event::poll(Duration::from_micros(time))? {
                 self.handle_events().wrap_err("handle events failed")?;
             }
@@ -250,25 +248,22 @@ impl App {
             self.dead = true;
             return Ok(());
         }
-        let x_check: Vec<bool> = self.x.clone().into_iter().map(|x| {
-            x > self.head[0] - 1.0 && x < self.head[0] + 1.0
-        }).collect();
 
-        let y_check: Vec<bool> = self.y.clone().into_iter().map(|x| {
-            x > self.head[1] - 1.0 && x < self.head[1] + 1.0
-        }).collect();
-        for i in 0..self.x.len() {
-            if y_check[i] && x_check[i] {
-                self.dead = true;
-                return Ok(());
-            }
+        let check = self.segments.clone().iter().map(|x| {
+            check_if_equal(x[0], self.head[0], 1.0) && check_if_equal(x[1], self.head[1], 1.0)
+        }).any(|x| x == true);
+
+
+        if check {
+            self.dead = true;
         }
+        
         Ok(())
     }
 
     fn collision_check(&mut self) -> Result<()> {
         //TODO: implement
-        if check_if_equal(self.head[0], self.fruits[0]) && check_if_equal(self.head[1], self.fruits[1]) {
+        if check_if_equal(self.head[0], self.fruits[0], 2.0) && check_if_equal(self.head[1], self.fruits[1], 2.0) {
             self.score += 100;
             self.update_enemies()?;
             self.append_segment()?;
@@ -278,13 +273,11 @@ impl App {
 
     fn append_segment(&mut self) -> Result<()> {
         if self.length == 0 {
-            self.x.push(self.head[0] - self.direction[0][0]);
-            self.y.push(self.head[1] - self.direction[0][1]);
+            self.segments.push(vec![self.head[0] - self.direction[0][0], self.head[1] - self.direction[0][1]]);
             self.direction.push(self.direction[self.length].clone());
         }
         else {
-            self.x.push(self.x[self.length - 1] - self.direction[self.length][0]);
-            self.y.push(self.y[self.length - 1] - self.direction[self.length][1]);
+            self.segments.push(vec![self.segments[self.length - 1][0] - self.direction[self.length][0], self.segments[self.length - 1][1] - self.direction[self.length][1]]);
             self.direction.push(self.direction[self.length].clone());
         }
         self.length += 1;
@@ -305,8 +298,8 @@ impl App {
         }
         let last_dir = self.direction.clone();
         for i in 0..self.length{
-            self.x[i] += self.direction[i + 1][0];
-            self.y[i] += self.direction[i + 1][1];
+            self.segments[i][0] += self.direction[i + 1][0];
+            self.segments[i][1] += self.direction[i + 1][1];
             self.direction[i + 1] = last_dir[i].clone();
         }
         Ok(())
@@ -327,8 +320,7 @@ impl App {
             score: 0,
             highscore: 0,
             exit: false, 
-            y: vec![],
-            x: vec![],
+            segments: vec![],
             length: 0,
             on_puase: false,
             dead: false,
@@ -411,8 +403,7 @@ impl App {
 
             self.dead = false;
             self.on_puase = false;
-            self.y = vec![];
-            self.x = vec![];
+            self.segments = vec![];
             self.fruits = vec![0.0, 0.0];
             self.score = 0;
             self.highscore = num;
@@ -511,14 +502,14 @@ fn autorun(app: &mut App) -> Result<()> {
     Ok(())
 }
 
-fn check_if_equal(x1: f64, x2: f64) -> bool {
-    x1 > x2 - 2.0 && x1 < x2 + 2.0
+fn check_if_equal(x1: f64, x2: f64, d: f64) -> bool {
+    x1 > x2 - d && x1 < x2 + d
 }
 
 fn check_blocked(segments: Vec<	Vec<f64>>, pos: Vec<f64>, direction: Vec<f64>) -> bool {
     let seg_check = segments.iter().map(|x| {
         x[0] == pos[0] + direction[0] && x[1] == pos[1] + direction[1]
-    }).all(|x| x == true);
+    }).any(|x| x == true);
     seg_check
 } 
 
