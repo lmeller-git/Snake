@@ -7,6 +7,7 @@ use color_eyre::{
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 
+use num::ToPrimitive;
 use ratatui::widgets::canvas::Canvas;
 use ratatui::{
     prelude::*,
@@ -92,9 +93,9 @@ impl Widget for &App {
                 " Right ".into(),
                 "<Right> ".bold(),
                 " Down ".into(),
+                "<Down> ".bold(),
                 " Left ".into(),
                 "<Left>".bold(),
-                "<Down> ".bold(),
                 " Pause ".into(),
                 "<Esc> ".bold(),
                 " Quit ".into(),
@@ -201,7 +202,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {
         loop {
             terminal.draw(|frame| self.render_frame(frame))?;
-            let time = 100000;
+            let time = 50000;
             if event::poll(Duration::from_micros(time))? {
                 self.handle_events().wrap_err("handle events failed")?;
             }
@@ -434,7 +435,7 @@ impl App {
 
 fn autorun(app: &mut App) -> Result<()> {
     //TODO: implemmet
-    if app.length > 50 {
+    if app.length > 40 {
         if app.head[0] < 90.0 && app.head[0] > -90.0 {
             if app.head[1] == 44.0 && app.direction[0][1] == 1.0 {
                 app.right()?;
@@ -470,33 +471,69 @@ fn autorun(app: &mut App) -> Result<()> {
     if app.head[0] < app.fruits[0] {
         if app.direction[0][0] == -1.0{
             app.up()?;
+            if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+                app.down()?;
+            }
             return  Ok(());
         }
         app.right()?;
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.down()?;
+        }
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.up()?;
+        }
         return Ok(());
     }
     if app.head[0] > app.fruits[0] + 2.0 {
         if app.direction[0][0] == 1.0{
             app.up()?;
-            return  Ok(());
+            if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+                app.down()?;
+            }
+            return Ok(());
         }
         app.left()?;
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.down()?;
+        }
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.up()?;
+        }
         return Ok(());
     }
     if app.head[1] < app.fruits[1] {
         if app.direction[0][1] == -1.0{
             app.left()?;
+            if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+                app.right()?;
+            }
             return  Ok(());
         }
         app.up()?;
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.right()?;
+        }
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.left()?;
+        }
         return Ok(());
     }
     if app.head[1] > app.fruits[1] + 2.0{
         if app.direction[0][1] == 1.0{
             app.left()?;
+            if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+                app.right()?;
+            }
             return  Ok(());
         }
         app.down()?;
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.right()?;
+        }
+        if check_blocked(&app.segments, &app.head, &app.direction[0]) {
+            app.left()?;
+        }
         return Ok(());
     }
     Ok(())
@@ -506,9 +543,14 @@ fn check_if_equal(x1: f64, x2: f64, d: f64) -> bool {
     x1 > x2 - d && x1 < x2 + d
 }
 
-fn check_blocked(segments: Vec<	Vec<f64>>, pos: Vec<f64>, direction: Vec<f64>) -> bool {
+fn check_blocked(segments: &Vec<	Vec<f64>>, pos: &Vec<f64>, direction: &Vec<f64>) -> bool {
     let seg_check = segments.iter().map(|x| {
-        x[0] == pos[0] + direction[0] && x[1] == pos[1] + direction[1]
+        for i in 1..segments.len() {
+            if (x[0] == pos[0] + direction[0] * i.to_f64().unwrap()) && (x[1] == pos[1] + direction[1] * i.to_f64().unwrap()) {
+                return true;
+            }
+        }
+        false
     }).any(|x| x == true);
     seg_check
 } 
