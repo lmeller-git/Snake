@@ -1,14 +1,11 @@
 use crate::tui;
 
-use color_eyre::owo_colors::OwoColorize;
 use color_eyre::{
     eyre::WrapErr,
     Result,
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-
-use num::ToPrimitive;
 
 use ratatui::widgets::canvas::Canvas;
 use ratatui::{
@@ -18,6 +15,7 @@ use ratatui::{
     style::Color,
 };
 
+use std::collections::VecDeque;
 use std::path::Path;
 
 use std::time::Duration;
@@ -141,6 +139,15 @@ impl Widget for &App {
             .block(block.clone())
             .left_aligned()
             .render(area, buf);
+            
+            if self.auto {
+                let pause_text = Text::from("Auto");
+
+                Paragraph::new(pause_text)
+                .centered()
+                .block(block.clone())
+                .render(area, buf);
+            }
                 
             if self.on_puase {
                 let pause_text = Text::from("Paused");
@@ -150,6 +157,7 @@ impl Widget for &App {
                 .block(block.clone())
                 .render(area, buf);
             }
+
 
             //TODO render snake and food
             let player = Canvas::default()
@@ -195,7 +203,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {
         loop {
             terminal.draw(|frame| self.render_frame(frame))?;
-            let time = 100000;
+            let time = 1000;
             if event::poll(Duration::from_micros(time))? {
                 self.handle_events().wrap_err("handle events failed")?;
             }
@@ -260,7 +268,7 @@ impl App {
 
     fn collision_check(&mut self) -> Result<()> {
         //TODO: implement
-        if (self.head[0] > self.fruits[0] - 2.0 && self.head[0] < self.fruits[0] + 2.0) && (self.head[1] > self.fruits[1] - 2.0 && self.head[1] < self.fruits[1] + 2.0) {
+        if check_if_equal(self.head[0], self.fruits[0]) && check_if_equal(self.head[1], self.fruits[1]) {
             self.score += 100;
             self.update_enemies()?;
             self.append_segment()?;
@@ -435,8 +443,84 @@ impl App {
 
 fn autorun(app: &mut App) -> Result<()> {
     //TODO: implemmet
+    if app.length > 50 {
+        if app.head[0] < 90.0 && app.head[0] > -90.0 {
+            if app.head[1] == 44.0 && app.direction[0][1] == 1.0 {
+                app.right()?;
+            }
+            else if app.head[1] == 44.0 && app.direction[0][0] == 1.0 {
+                app.down()?;
+            }
+            else if app.head[1] == -45.0 && app.direction[0][1] == -1.0 {
+                app.right()?;
+            }
+            else if app.head[1] == -45.0 && app.direction[0][0] == 1.0 {
+                app.up()?;
+            }
+        }
+        else if app.head[0] == 90.0 {
+            if app.head[1] < 45.0 {
+                app.up()?;
+            }
+            else if app.head[1] == 45.0 {
+                app.left()?;
+            }
+        }
+        else if app.head[0] == -90.0 {
+            if app.head[1] == 45.0 {
+                app.down()?;
+            }
+            else if app.head[1] == -45.0 {
+                app.right()?;
+            }
+        }
+        return Ok(());
+    }  
+    if app.head[0] < app.fruits[0] {
+        if app.direction[0][0] == -1.0{
+            app.up()?;
+            return  Ok(());
+        }
+        app.right()?;
+        return Ok(());
+    }
+    if app.head[0] > app.fruits[0] + 2.0 {
+        if app.direction[0][0] == 1.0{
+            app.up()?;
+            return  Ok(());
+        }
+        app.left()?;
+        return Ok(());
+    }
+    if app.head[1] < app.fruits[1] {
+        if app.direction[0][1] == -1.0{
+            app.left()?;
+            return  Ok(());
+        }
+        app.up()?;
+        return Ok(());
+    }
+    if app.head[1] > app.fruits[1] + 2.0{
+        if app.direction[0][1] == 1.0{
+            app.left()?;
+            return  Ok(());
+        }
+        app.down()?;
+        return Ok(());
+    }
     Ok(())
 }
+
+fn check_if_equal(x1: f64, x2: f64) -> bool {
+    x1 > x2 - 2.0 && x1 < x2 + 2.0
+}
+
+fn check_blocked(segments: Vec<	Vec<f64>>, pos: Vec<f64>, direction: Vec<f64>) -> bool {
+    let seg_check = segments.iter().map(|x| {
+        x[0] == pos[0] + direction[0] && x[1] == pos[1] + direction[1]
+    }).all(|x| x == true);
+    seg_check
+} 
 
 
 /*
