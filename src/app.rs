@@ -16,7 +16,7 @@ use ratatui::{
     style::Color,
 };
 
-use std::path::Path;
+use std::env;
 
 use std::time::Duration;
 use std::vec;
@@ -397,10 +397,18 @@ impl App {
     fn restart(&mut self) -> Result<()> {
 
         if self.dead {
-            let path = Path::new("Highscore.bin");
-            save(path, self.highscore)?;
+            let path_to_self = env::current_exe()?;
+            let path = path_to_self
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p|p.parent())
+                .map(|p|p.join("Highscore.bin"))
+                .unwrap();
+        
+
+            save(&path, self.highscore)?;
             
-            let num = read(path)?;
+            let num = read(&path)?;
 
             self.dead = false;
             self.on_puase = false;
